@@ -1,0 +1,46 @@
+# Configuration sensitive - API keys
+config.yml
+
+# Data files - PDF inputs (could contain sensitive research papers)
+data/
+data/*
+
+# Generated results and outputs
+results/
+results/*
+
+# Log files
+logs/
+logs/*
+
+# R specific
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# Temporary files
+*~
+*.tmp
+*.temp
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE specific
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Cache and temporary R files
+.Rcache/
+packrat/lib*/
+packrat/src/
