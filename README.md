@@ -122,7 +122,7 @@ files_api:
 ### Configuration Claude API
 ```yaml
 anthropic:
-  model: "claude-3-5-sonnet-20241022"  # Modèle Claude à utiliser
+  model: "claude-sonnet-4-20250514"  # Modèle Claude à utiliser
   max_tokens: 4000                     # Limite de tokens
   timeout: 60                          # Timeout en secondes
 
