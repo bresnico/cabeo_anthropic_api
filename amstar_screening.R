@@ -15,6 +15,7 @@ config <- yaml::read_yaml("config.yml")
 
 # Source des fonctions utilitaires
 source("functions/claude_api.R")
+source("functions/files_api.R")
 source("functions/amstar_evaluation.R")
 source("functions/data_processing.R")
 source("functions/utils.R")
@@ -57,14 +58,9 @@ amstar_screening <- function() {
     
     tryCatch({
       
-      # Extraction du texte PDF
-      cat("   Extraction du texte PDF...")
-      pdf_text <- extract_pdf_text(pdf_file)
-      cat(" ✅\n")
-      
-      # Appel à Claude pour évaluation AMSTAR2
+      # Évaluation AMSTAR2 avec Claude (Files API + fallback automatique)
       cat("   Évaluation AMSTAR2 avec Claude...")
-      evaluation <- evaluate_with_claude(pdf_text, article_id)
+      evaluation <- evaluate_with_claude(pdf_file, article_id, batch_index = i, total_files = length(pdf_files))
       cat(" ✅\n")
       
       # Traitement des résultats

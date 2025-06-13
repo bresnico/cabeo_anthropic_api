@@ -27,13 +27,48 @@ check_setup <- function() {
   return(TRUE)
 }
 
-# Récupération des fichiers PDF
+# Récupération des fichiers PDF avec détection de doublons via Files API
 get_pdf_files <- function() {
   
   pdf_pattern <- "\\.(pdf|PDF)$"
   pdf_files <- list.files(config$folders$pdf_input, 
                           pattern = pdf_pattern, 
                           full.names = TRUE)
+  
+  # Si Files API activée, logger les fichiers déjà présents chez Anthropic
+  if(config$files_api$enabled) {
+    
+    tryCatch({
+      log_message("🔍 Vérification des doublons via Files API", level = "INFO")
+      remote_files <- list_remote_files()
+      
+      if(!is.null(remote_files) && length(remote_files) > 0) {
+        remote_names <- sapply(remote_files, function(f) f$filename)
+        local_names <- basename(pdf_files)
+        
+        # Identifier les fichiers déjà uploadés
+        already_uploaded <- intersect(local_names, remote_names)
+        new_files <- setdiff(local_names, remote_names)
+        
+        if(length(already_uploaded) > 0) {
+          log_message(sprintf("♻️  %d fichiers déjà uploadés: %s", 
+                             length(already_uploaded), 
+                             paste(already_uploaded, collapse = ", ")), level = "INFO")
+        }
+        
+        if(length(new_files) > 0) {
+          log_message(sprintf("📤 %d nouveaux fichiers à uploader: %s", 
+                             length(new_files), 
+                             paste(new_files, collapse = ", ")), level = "INFO")
+        }
+        
+        log_message(sprintf("📊 Total: %d locaux, %d distants, %d déjà uploadés", 
+                           length(local_names), length(remote_names), length(already_uploaded)), level = "INFO")
+      }
+    }, error = function(e) {
+      log_message(sprintf("⚠️ Erreur vérification doublons: %s", e$message), level = "WARNING")
+    })
+  }
   
   return(pdf_files)
 }
@@ -105,6 +140,7 @@ validate_project_structure <- function() {
     "logs/" = "directory",
     "functions/" = "directory",
     "functions/claude_api.R" = "file",
+    "functions/files_api.R" = "file",
     "functions/amstar_evaluation.R" = "file",
     "functions/data_processing.R" = "file",
     "functions/utils.R" = "file"

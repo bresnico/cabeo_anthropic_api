@@ -1,21 +1,65 @@
 # Fonctions pour l'évaluation AMSTAR2
 
-# Fonction principale d'évaluation avec Claude
-evaluate_with_claude <- function(pdf_text, article_id) {
+# Fonction principale d'évaluation avec Claude (Files API + fallback)
+evaluate_with_claude <- function(pdf_path, article_id, batch_index = 1, total_files = 1) {
+  
+  # Tenter d'abord avec Files API si activée
+  if(config$files_api$enabled) {
+    
+    log_message(sprintf("🚀 Tentative Files API pour %s", article_id), level = "INFO")
+    
+    tryCatch({
+      # Calcul du délai pour batch processing (rate limiting protection)
+      batch_delay <- 0
+      if(total_files > 5) {
+        # Pour plus de 5 fichiers, introduire des délais progressifs
+        batch_delay <- min(batch_index * 2, 10)  # Max 10 secondes entre fichiers
+        log_message(sprintf("📊 Batch %d/%d - Délai anti-rate-limit: %ds", 
+                           batch_index, total_files, batch_delay), level = "INFO")
+      }
+      
+      # Étape 1: Obtenir ou uploader le fichier
+      file_info <- get_or_upload_file(pdf_path, batch_delay)
+      
+      if(!is.null(file_info)) {
+        # Étape 2: Déterminer le type de contenu
+        content_type <- get_content_type(pdf_path)
+        
+        # Étape 3: Appel à Claude avec file_id
+        result <- call_claude_api_with_file(file_info$id, article_id, content_type, 
+                                          max_retries = config$screening$retry_attempts)
+        
+        # Validation de la réponse
+        validated_result <- validate_claude_response(result)
+        
+        log_message(sprintf("✅ Évaluation Files API réussie pour %s", article_id), level = "INFO")
+        return(validated_result)
+      }
+    }, error = function(e) {
+      log_message(sprintf("⚠️ Échec Files API pour %s: %s", article_id, e$message), level = "WARNING")
+    })
+  }
+  
+  # Fallback vers méthode classique
+  log_message(sprintf("🔄 Fallback méthode classique pour %s", article_id), level = "INFO")
+  
+  # Extraction du texte PDF
+  pdf_text <- extract_pdf_text(pdf_path)
   
   # Limitation de la longueur du texte pour éviter les timeouts
-  max_chars <- 50000  # Limite raisonnable pour Claude
+  max_chars <- 50000
   if(nchar(pdf_text) > max_chars) {
     pdf_text <- substr(pdf_text, 1, max_chars)
     log_message(sprintf("Texte tronqué pour %s (%d caractères)", article_id, max_chars), level = "WARNING")
   }
   
-  # Appel à Claude
+  # Appel à Claude avec méthode classique
   result <- call_claude_api(pdf_text, article_id, max_retries = config$screening$retry_attempts)
   
   # Validation de la réponse
   validated_result <- validate_claude_response(result)
   
+  log_message(sprintf("✅ Évaluation classique réussie pour %s", article_id), level = "INFO")
   return(validated_result)
 }
 

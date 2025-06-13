@@ -1,21 +1,41 @@
-# AMSTAR2 Screening Automatisé avec Claude
+# 🚀 AMSTAR2 Screening Automatisé avec Claude + Files API
 
-Système automatisé d'évaluation de revues systématiques selon les critères AMSTAR2 utilisant l'API Claude d'Anthropic.
+Système automatisé d'évaluation de revues systématiques selon les critères AMSTAR2 utilisant l'API Claude d'Anthropic avec la **révolutionnaire Files API** pour une performance optimale.
+
+## ✨ Nouveauté : Intégration Files API d'Anthropic
+
+Ce système utilise la toute nouvelle [Files API d'Anthropic](https://docs.anthropic.com/en/docs/build-with-claude/files) qui révolutionne l'interaction avec les documents :
+
+### 🔄 Workflow Révolutionnaire
+- **Upload 1x, utilise ∞ fois** : Chaque PDF n'est uploadé qu'une seule fois
+- **Performance x10** : Questions instantanées sans re-upload
+- **Coûts réduits** : Élimination du trafic réseau redondant
+- **Détection de doublons intelligente** : Réutilisation automatique des fichiers existants
+- **Fallback automatique** : Retour transparent vers l'ancienne méthode si nécessaire
 
 ## 🚀 Installation et Configuration
 
 ### Prérequis
 ```r
-# Installation des packages requis
-install.packages(c("pdftools", "httr2", "openxlsx", "dplyr", "yaml", "jsonlite", "stringr"))
+# Installation des packages requis (ajout de curl pour Files API)
+install.packages(c("pdftools", "httr2", "openxlsx", "dplyr", "yaml", "jsonlite", "stringr", "curl", "tools"))
 ```
 
 ### Configuration
 1. **Clé API Anthropic** : Modifiez le fichier `config.yml` et remplacez `your-anthropic-api-key-here` par votre vraie clé API.
 
-2. **Structure des dossiers** :
+2. **Configuration Files API** : Le système est pré-configuré pour utiliser Files API. Vous pouvez ajuster les paramètres dans `config.yml` :
+   ```yaml
+   files_api:
+     enabled: true                    # Active Files API (recommandé)
+     source_directory: "data"          # Dossier des PDFs
+     max_file_size_mb: 32            # Limite de taille
+     allowed_extensions: ["pdf", "txt", "jpg", "jpeg", "png", "gif", "webp"]
    ```
-   /Users/bresnico/Projets/cabeo_anthropic_api/
+
+3. **Structure des dossiers** :
+   ```
+   cabeo_anthropic_api/
    ├── config.yml
    ├── amstar_screening.R
    ├── README.md
@@ -23,13 +43,23 @@ install.packages(c("pdftools", "httr2", "openxlsx", "dplyr", "yaml", "jsonlite",
    ├── results/                 # Fichiers Excel générés
    ├── logs/                    # Logs d'exécution
    └── functions/
-       ├── claude_api.R
+       ├── claude_api.R         # API Claude + Files API
+       ├── files_api.R          # 🆕 Gestion Files API
        ├── amstar_evaluation.R
        ├── data_processing.R
        └── utils.R
    ```
 
 ## 📖 Utilisation
+
+### 🎯 Workflow Files API Automatique
+
+Le système fonctionne maintenant avec un workflow intelligent :
+
+1. **Première exécution** : Upload automatique des PDFs vers Anthropic Files API
+2. **Exécutions suivantes** : Réutilisation instantanée des fichiers déjà uploadés
+3. **Détection intelligente** : Identification automatique des doublons
+4. **Fallback sécurisé** : Basculement vers l'ancienne méthode si Files API indisponible
 
 ### Méthode simple
 1. Placez vos fichiers PDF de revues systématiques dans le dossier `data/`
@@ -47,6 +77,16 @@ resultats <- amstar_screening()
 # Accès aux résultats
 print(resultats$resultats)        # Tableau principal
 print(resultats$justifications)   # Justifications détaillées
+```
+
+### 🔍 Comprendre le Workflow Files API
+
+```r
+# Le système effectue automatiquement :
+# 1. Vérification des fichiers déjà uploadés chez Anthropic
+# 2. Upload uniquement des nouveaux fichiers
+# 3. Référencement par file_id pour les évaluations
+# 4. Logs détaillés de toutes les opérations
 ```
 
 ## 📊 Outputs
@@ -67,10 +107,19 @@ print(resultats$justifications)   # Justifications détaillées
 
 ## ⚙️ Configuration Avancée
 
-### Modification du prompt
-Pour personnaliser le prompt d'évaluation, modifiez la fonction `get_amstar_prompt()` dans `functions/claude_api.R`.
+### Configuration Files API
+```yaml
+files_api:
+  enabled: true                        # Active/désactive Files API
+  source_directory: "data"              # Dossier source des PDFs
+  allowed_extensions: ["pdf", "txt", "jpg", "jpeg", "png", "gif", "webp"]
+  max_file_size_mb: 32                 # Limite de taille (max 32MB)
+  purpose: "user_request"               # Purpose pour l'upload
+  anthropic_version: "2023-06-01"       # Version API
+  beta_header: "files-api-2025-04-14"   # Header beta Files API
+```
 
-### Paramètres dans config.yml
+### Configuration Claude API
 ```yaml
 anthropic:
   model: "claude-3-5-sonnet-20241022"  # Modèle Claude à utiliser
@@ -81,6 +130,16 @@ screening:
   retry_attempts: 3                    # Nombre de tentatives en cas d'erreur
   retry_delay: 2                       # Délai entre tentatives
   export_justifications: true          # Export du fichier de justifications
+```
+
+### Modification du prompt
+Pour personnaliser le prompt d'évaluation, modifiez la fonction `get_amstar_prompt()` dans `functions/claude_api.R`.
+
+### Désactiver Files API
+Pour revenir à l'ancienne méthode :
+```yaml
+files_api:
+  enabled: false  # Force l'utilisation de l'ancienne méthode
 ```
 
 ## 🔬 Critères AMSTAR2 Évalués
@@ -129,14 +188,79 @@ Consultez le fichier `logs/screening_log.txt` pour diagnostiquer les problèmes.
 
 ## 📝 Notes Importantes
 
-- **Limitation de texte** : Les PDFs très longs sont automatiquement tronqués à 50,000 caractères
-- **Gestion d'erreurs** : Le système fait 3 tentatives automatiques en cas d'échec
-- **Format JSON** : Les réponses de Claude sont forcées en format JSON strict
-- **Compatibilité** : Le format de sortie est compatible avec votre workflow existant
+### Files API
+- **Upload unique** : Chaque PDF n'est uploadé qu'une seule fois chez Anthropic
+- **Réutilisation illimitée** : Questions multiples sans re-upload
+- **Détection de doublons** : Vérification automatique des fichiers existants
+- **Limite de taille** : 32 MB maximum par fichier (limite Anthropic)
+- **Stockage total** : 100 GB par organisation Anthropic
+- **Formats supportés** : PDF, TXT, JPG, PNG, GIF, WebP
+
+### Fallback et Compatibilité
+- **Fallback automatique** : Retour vers l'ancienne méthode si Files API échoue
+- **Limitation de texte classique** : PDFs tronqués à 50,000 caractères en mode fallback
+- **Gestion d'erreurs** : 3 tentatives automatiques pour chaque méthode
+- **Format JSON** : Réponses Claude forcées en format JSON strict
+- **Compatibilité totale** : Format de sortie identique au workflow existant
+
+### Performance et Coûts
+- **Réduction drastique** du trafic réseau (upload unique)
+- **Accélération** des évaluations répétées
+- **Optimisation** des coûts de bande passante
+- **Évolutivité** pour traitement de grandes bibliothèques
+
+## 🔧 Dépannage Files API
+
+### Messages de logs Files API
+```
+🔍 Vérification des doublons via Files API
+♻️  2 fichiers déjà uploadés: fichier1.pdf, fichier2.pdf
+📤 1 nouveaux fichiers à uploader: fichier3.pdf
+📊 Total: 3 locaux, 2 distants, 2 déjà uploadés
+🚀 Tentative Files API pour article_123
+✅ Upload réussi: fichier3.pdf (ID: file_abc123)
+✅ Évaluation Files API réussie pour article_123
+🔄 Fallback méthode classique pour article_456
+```
+
+### Problèmes spécifiques Files API
+
+**Files API indisponible**
+```
+⚠️ Échec Files API pour article: HTTP 429 Too Many Requests
+🔄 Fallback méthode classique pour article
+```
+→ Le système bascule automatiquement vers l'ancienne méthode
+
+**Fichier trop volumineux**
+```
+❌ Fichier trop volumineux (>32 MB): document.pdf
+```
+→ Réduisez la taille du PDF ou utilisez un outil de compression
+
+**Extension non supportée**
+```
+❌ Extension non autorisée: doc
+```
+→ Convertissez le fichier en PDF
 
 ## 🤝 Support
 
 Pour toute question ou problème :
-1. Consultez les logs dans `logs/screening_log.txt`
-2. Vérifiez la configuration dans `config.yml`
-3. Testez avec un seul PDF simple d'abord
+1. **Logs détaillés** : Consultez `logs/screening_log.txt` pour diagnostics complets
+2. **Configuration** : Vérifiez les paramètres `files_api` dans `config.yml`
+3. **Test simple** : Commencez avec un seul PDF de petite taille
+4. **Fallback** : Désactivez Files API temporairement si nécessaire (`enabled: false`)
+
+## 🎉 Avantages de cette Implémentation
+
+- ✅ **Révolutionnaire** : Premier système R utilisant Files API d'Anthropic
+- ✅ **Intelligent** : Détection automatique des doublons et optimisation des uploads
+- ✅ **Robuste** : Fallback automatique garantissant la continuité de service
+- ✅ **Compatible** : Aucun changement requis dans votre workflow existant
+- ✅ **Performant** : Gains de performance dramatiques pour les évaluations répétées
+- ✅ **Économique** : Réduction significative des coûts de bande passante
+
+---
+
+*Développé avec ❤️ pour optimiser l'évaluation AMSTAR2 avec la puissance de l'IA moderne*

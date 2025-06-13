@@ -1,10 +1,10 @@
 # Fonctions pour l'interaction avec l'API Claude d'Anthropic
 
-# Prompt AMSTAR2 optimisé
+# Prompt AMSTAR2 optimisé pour Files API
 get_amstar_prompt <- function() {
   return("Tu es un expert en méthodologie de recherche spécialisé dans l'évaluation de revues systématiques selon les critères AMSTAR2.
 
-Évalue cette revue systématique selon les 16 critères AMSTAR2. Pour chaque item, attribue un score (Oui/Partiellement/Non/N/A) et fournis une justification CONCISE (maximum 20 mots).
+Évalue la revue systématique fournie en pièce jointe selon les 16 critères AMSTAR2. Pour chaque item, attribue un score (Oui/Partiellement/Non/N/A) et fournis une justification CONCISE (maximum 20 mots).
 
 CRITÈRES AMSTAR2 À ÉVALUER :
 
@@ -61,11 +61,112 @@ Réponds UNIQUEMENT avec le JSON suivant (utilise l'ARTICLE_ID fourni ci-dessus)
 }")
 }
 
-# Appel à l'API Claude avec gestion d'erreurs et retry
+# Appel à l'API Claude avec Files API
+call_claude_api_with_file <- function(file_id, article_id, content_type = "document", max_retries = 3) {
+  
+  if(!config$files_api$enabled) {
+    stop("Files API désactivée mais appel avec file_id")
+  }
+  
+  prompt <- get_amstar_prompt()
+  full_prompt <- paste(prompt, "\n\nARTICLE_ID:", article_id)
+  
+  # Construire le content block selon le type de fichier
+  if (content_type == "document") {
+    content_block <- list(
+      type = "document",
+      source = list(
+        type = "file",
+        file_id = file_id
+      )
+    )
+  } else if (content_type == "image") {
+    content_block <- list(
+      type = "image",
+      source = list(
+        type = "file",
+        file_id = file_id
+      )
+    )
+  } else {
+    stop("Type de fichier non supporté pour les questions")
+  }
+  
+  # Construire le message avec l'ordre correct: text d'abord, document après
+  messages <- list(
+    list(
+      role = "user",
+      content = list(
+        list(
+          type = "text",
+          text = full_prompt
+        ),
+        content_block
+      )
+    )
+  )
+  
+  # Préparation de la requête
+  request_body <- list(
+    model = config$anthropic$model,
+    max_tokens = config$anthropic$max_tokens,
+    messages = messages
+  )
+  
+  # Tentatives avec retry
+  for(attempt in 1:max_retries) {
+    
+    tryCatch({
+      
+      # Appel API avec headers Files API
+      response <- request("https://api.anthropic.com/v1/messages") %>%
+        req_headers(
+          "x-api-key" = config$anthropic$api_key,
+          "anthropic-version" = config$files_api$anthropic_version,
+          "anthropic-beta" = config$files_api$beta_header,
+          "content-type" = "application/json"
+        ) %>%
+        req_body_json(request_body) %>%
+        req_timeout(config$anthropic$timeout) %>%
+        req_perform()
+      
+      # Extraction du contenu
+      response_data <- response %>% resp_body_json()
+      content <- response_data$content[[1]]$text
+      
+      # Nettoyage pour extraire le JSON
+      clean_json <- extract_json_from_response(content)
+      
+      # Validation JSON
+      result <- fromJSON(clean_json, flatten = FALSE)
+      
+      log_message(sprintf("✅ Évaluation réussie avec Files API pour %s", article_id), level = "INFO")
+      return(result)
+      
+    }, error = function(e) {
+      
+      if(attempt == max_retries) {
+        log_message(sprintf("❌ Échec Files API après %d tentatives pour %s: %s", max_retries, article_id, e$message), level = "ERROR")
+        stop(sprintf("Échec après %d tentatives: %s", max_retries, e$message))
+      }
+      
+      log_message(sprintf("⚠️ Tentative %d échouée pour %s: %s", attempt, article_id, e$message), level = "WARNING")
+      
+      # Délai progressif pour rate limiting (backoff exponentiel)
+      delay <- config$screening$retry_delay * (2 ^ (attempt - 1))
+      log_message(sprintf("⏳ Attente %d secondes avant nouvelle tentative", delay), level = "INFO")
+      Sys.sleep(delay)
+    })
+  }
+}
+
+# Appel à l'API Claude avec méthode classique (fallback)
 call_claude_api <- function(text_content, article_id, max_retries = 3) {
   
   prompt <- get_amstar_prompt()
-  full_prompt <- paste(prompt, "\n\nARTICLE_ID: ", article_id, "\n\nTEXTE DE LA REVUE SYSTÉMATIQUE :\n", text_content)
+  # Adapter le prompt pour méthode classique
+  classic_prompt <- str_replace(prompt, "fournie en pièce jointe", "ci-dessous")
+  full_prompt <- paste(classic_prompt, "\n\nARTICLE_ID: ", article_id, "\n\nTEXTE DE LA REVUE SYSTÉMATIQUE :\n", text_content)
   
   # Préparation de la requête
   request_body <- list(
@@ -81,7 +182,7 @@ call_claude_api <- function(text_content, article_id, max_retries = 3) {
     
     tryCatch({
       
-      # Appel API
+      # Appel API classique
       response <- request("https://api.anthropic.com/v1/messages") %>%
         req_headers(
           "x-api-key" = config$anthropic$api_key,
@@ -102,16 +203,22 @@ call_claude_api <- function(text_content, article_id, max_retries = 3) {
       # Validation JSON
       result <- fromJSON(clean_json, flatten = FALSE)
       
+      log_message(sprintf("✅ Évaluation réussie avec méthode classique pour %s", article_id), level = "INFO")
       return(result)
       
     }, error = function(e) {
       
       if(attempt == max_retries) {
+        log_message(sprintf("❌ Échec méthode classique après %d tentatives pour %s: %s", max_retries, article_id, e$message), level = "ERROR")
         stop(sprintf("Échec après %d tentatives: %s", max_retries, e$message))
       }
       
-      log_message(sprintf("Tentative %d échouée pour %s: %s", attempt, article_id, e$message), level = "WARNING")
-      Sys.sleep(config$screening$retry_delay)
+      log_message(sprintf("⚠️ Tentative %d échouée pour %s: %s", attempt, article_id, e$message), level = "WARNING")
+      
+      # Délai progressif pour rate limiting (backoff exponentiel)
+      delay <- config$screening$retry_delay * (2 ^ (attempt - 1))
+      log_message(sprintf("⏳ Attente %d secondes avant nouvelle tentative", delay), level = "INFO")
+      Sys.sleep(delay)
     })
   }
 }

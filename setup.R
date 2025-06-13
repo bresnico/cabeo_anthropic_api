@@ -3,8 +3,8 @@
 cat("🔧 Configuration initiale du projet AMSTAR2 Screening\n")
 cat("=" %>% rep(50) %>% paste(collapse = ""), "\n")
 
-# Vérification et installation des packages requis
-required_packages <- c("pdftools", "httr2", "openxlsx", "dplyr", "yaml", "jsonlite", "stringr")
+# Vérification et installation des packages requis (ajout curl et tools pour Files API)
+required_packages <- c("pdftools", "httr2", "openxlsx", "dplyr", "yaml", "jsonlite", "stringr", "curl", "tools")
 
 cat("📦 Vérification des packages requis...\n")
 
